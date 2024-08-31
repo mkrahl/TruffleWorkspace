@@ -1,0 +1,22 @@
+{
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2",
+    "@prb/math": "^4.0.3",
+    "truffle": "^5.11.5"
+  },
+  "scripts": {
+    "ganache": "ganache --wallet.totalAccounts 251 --wallet.deterministic true -u --account_keys_path keys.json"
+  },
+  "name": "truffleworkspace",
+  "version": "1.0.0",
+  "main": "truffle-config.js",
+  "directories": {
+    "test": "test"
+  },
+  "devDependencies": {
+    "mocha": "^10.1.0"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}
