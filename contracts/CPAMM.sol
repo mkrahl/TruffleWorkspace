@@ -40,10 +40,10 @@ contract CPAMM {
         token0 = IERC20(_token0);
         token1 = IERC20(_token1);
         total_member_count = _members;
-        k_lower = sd(int256(_k_lower));
-        k_upper = sd(int256(_k_upper));
-        midpoint = sd(int256(_midpoint));
-        steepness = sd(int256(_steepness));
+        k_lower = sd(int256(_k_lower * 1e16));
+        k_upper = sd(int256(_k_upper * 1e16));
+        midpoint = sd(int256(_midpoint* 1e18));
+        steepness = sd(int256(_steepness*1e18));
     }
     
     function swap(address _tokenIn, uint256 _amountIn) external{
