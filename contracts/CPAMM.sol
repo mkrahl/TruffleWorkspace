@@ -78,16 +78,22 @@ contract CPAMM {
     
     function _clear() private {
 
-        SD59x18 price_per_energy = _get_price(reserve0, reserve1);
+        SD59x18 price_per_energy = get_price();
 
         for (uint256 i = 0; i < current_member_list.length; i++ ){
             address member = current_member_list[i];
             int256 token0_balance = int256(balanceOf[member].token0_balance);
             int256 token1_balance = int256(balanceOf[member].token1_balance);
+            int256 total_demand = sd(reserve0).div(price_per_energy).intoInt256(); 
             // if member deposited energy
             if (token1_balance > 0){
                 uint256 amount_out = uint256(price_per_energy.mul(sd(token1_balance)).intoInt256());
                 token0.transfer(member,amount_out);
+                // if energy surpuls, transfer part of energy tokens back to sender
+                if (reserve1 > total_demand){
+                    uint256 surplus = uint256(sd(reserve1).sub(sd(total_demand)).mul(sd(token1_balance).div(sd(reserve1))).intoInt256());
+                    token1.transfer(member,surplus);
+                }
             }
             // if memeber deposited money
             else {
@@ -107,8 +113,8 @@ contract CPAMM {
         return (sd(2e18) * sd(1e18)).intoInt256();
     }
 
-    function _get_price(int256 _reserve0, int256 _reserve1) public view returns (SD59x18){
-        SD59x18 ratio = sd(_reserve1).div(sd(_reserve0));
+    function get_price() public view returns (SD59x18){
+        SD59x18 ratio = sd(reserve1).div(sd(reserve0));
         SD59x18 nominator = k_upper.sub(k_lower);
         if(ratio.sub(midpoint) <= EXP_MAX_INPUT){
 
@@ -124,23 +130,6 @@ contract CPAMM {
         }
     }
 
-    function _sqrt(uint256 y) private pure returns (uint256 z) {
-        if (y > 3) {
-            z = y;
-            uint256 x = y / 2 + 1;
-            while (x < z) {
-                z = x;
-                x = (y / x + x) / 2;
-            }
-        } else if (y != 0) {
-            z = 1;
-        }
-    }
-
-    function _min(uint256 x, uint256 y) private pure returns (uint256) {
-        return x <= y ? x : y;
-    }
-
     function _update(int256 _res0, int256 _res1) private {
         reserve0 = _res0;
         reserve1 = _res1;
@@ -152,5 +141,11 @@ contract CPAMM {
             }
         }
         return false;
+    }
+    function get_reserve0() public view returns (uint256){
+        return uint256(reserve0);
+    }
+    function get_reserve1() public view returns (uint256){
+        return uint256(reserve1);
     }
 }
