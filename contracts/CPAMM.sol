@@ -11,8 +11,8 @@ contract CPAMM {
     int256 public reserve0 = 0; // MoneyTokens in LP
     int256 public reserve1 = 0; // EnergyTokens in LP
 
-    SD59x18 public immutable k_lower; // lower price limit
-    SD59x18 public immutable k_upper; // upper price limit
+    SD59x18 public k_lower; // lower price limit
+    SD59x18 public k_upper; // upper price limit
     SD59x18 public immutable midpoint; // parameter for sigmoid bonding curve
     SD59x18 public immutable steepness; // parameter for sigmoid bonding curve
 
@@ -34,7 +34,8 @@ contract CPAMM {
     uint256 public immutable total_member_count;
 
     //  Mapping to keep track of deposited tokens during swapping phase. Gets reset after each market clearing
-    mapping(address => balance_Struct) public balanceOf;
+    uint256 public current_mapping_count = 0;
+    mapping(uint256 => mapping(address => balance_Struct)) public balanceOf;
 
     constructor(address _token0, address _token1,uint256 _members,uint256 _k_lower,uint256 _k_upper,uint256 _midpoint,uint256 _steepness) {
         token0 = IERC20(_token0);
@@ -52,7 +53,7 @@ contract CPAMM {
         require(_tokenIn == address(token0) || _tokenIn == address(token1),"invalid token");
 
         //check if sender already submitted. Ensures only one token is swapped for each market clearing window.
-        require(_exists(msg.sender),"Account already deposited");
+        require(!(_exists(msg.sender)),"Account already deposited");
 
         // determine which token is deposited
         bool isToken0 = _tokenIn == address(token0);
@@ -68,11 +69,12 @@ contract CPAMM {
         current_member_list.push(msg.sender);
 
         // update sender balance
-        isToken0 ? balanceOf[msg.sender].token0_balance = _amountIn : balanceOf[msg.sender].token1_balance = _amountIn;
+        isToken0 ? balanceOf[current_mapping_count][msg.sender].token0_balance = _amountIn : balanceOf[current_mapping_count][msg.sender].token1_balance = _amountIn;
 
         //check if all members have distributed, if so, clear market
         if (current_member_list.length == total_member_count){
             _clear();
+            delete current_member_list;
         }
     }
     
@@ -82,8 +84,8 @@ contract CPAMM {
 
         for (uint256 i = 0; i < current_member_list.length; i++ ){
             address member = current_member_list[i];
-            int256 token0_balance = int256(balanceOf[member].token0_balance);
-            int256 token1_balance = int256(balanceOf[member].token1_balance);
+            int256 token0_balance = int256(balanceOf[current_mapping_count][member].token0_balance);
+            int256 token1_balance = int256(balanceOf[current_mapping_count][member].token1_balance);
             int256 total_demand = sd(reserve0).div(price_per_energy).intoInt256(); 
             // if member deposited energy
             if (token1_balance > 0){
@@ -105,6 +107,7 @@ contract CPAMM {
 
 
         }
+        current_mapping_count= current_mapping_count+1;
         
 
     }
@@ -147,5 +150,11 @@ contract CPAMM {
     }
     function get_reserve1() public view returns (uint256){
         return uint256(reserve1);
+    }
+    function set_k_lower(uint256 _k_lower) public {
+        k_lower = sd(int256(_k_lower));
+    }
+    function set_k_upper(uint256 _k_upper) public {
+        k_upper = sd(int256(_k_upper));
     }
 }
