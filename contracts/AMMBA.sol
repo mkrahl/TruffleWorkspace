@@ -4,7 +4,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SD59x18, sd } from "@prb/math/src/SD59x18.sol";
 import { UD60x18, ud } from "@prb/math/src/UD60x18.sol";
 
-contract CPAMM {
+contract AMMBA {
     event RefundEvent(uint256 refund_to, uint256 amount,uint256 balance );
     event EnergyEvent(uint256 refund_to, uint256 amount,uint256 balance );
     IERC20 public immutable token0; // MoneyToken address
