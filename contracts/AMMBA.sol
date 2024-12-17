@@ -18,8 +18,22 @@ contract AMMBA {
     SD59x18 public midpoint; // parameter for sigmoid bonding curve
     SD59x18 public steepness; // parameter for sigmoid bonding curve
 
-    int256 constant uEXP_MAX_INPUT = 133_084258667509499440; // Max input for exp function used in pricing to avoid overflow
-    SD59x18 constant EXP_MAX_INPUT = SD59x18.wrap(uEXP_MAX_INPUT);
+    // Mapping to keep track of price per energy for every round.
+    mapping(uint256 => uint256) public prices;
+
+    mapping(uint256 => uint256) public s_e;
+
+    //  Counter to index round number. Increments after each market clearing.
+    uint256 public current_mapping_count = 0;
+
+    // List of transaction data. Keeps records of past rouds time current_mapping_count => {address => data}
+    mapping(uint256 => mapping(address => balance_Struct)) public balanceOf;
+
+    /* List of Market Participants that have submitted trades. Gets reset after each market clearing. 
+    Note: Acts as the keys for balanceOf mapping*/
+    address[] public current_member_list;
+
+    SD59x18 constant EXP_MAX_INPUT = SD59x18.wrap(133_084258667509499440);// Max input for exp function used in pricing to avoid overflow
 
     /* struct to store energy and money balances of members*/
     struct balance_Struct {
@@ -30,25 +44,9 @@ contract AMMBA {
         uint256 token1_out;
     }  
 
-    /* List of Market Participants that have submitted trades. Gets reset after each market clearing. 
-    Note: Acts as the keys for balanceOf mapping*/
-    address[] public current_member_list;
-
-    /* How many market participants are in the market. When all those members have submitted their trades, the market is cleard. 
-    In a realistic setting, this would happen in fixed time intervals*/
-    uint256 public immutable total_member_count;
-
-    //  Mapping to keep track of deposited tokens during swapping phase. Gets reset after each market clearing
-    uint256 public current_mapping_count = 0;
-    mapping(uint256 => mapping(address => balance_Struct)) public balanceOf;
-
-    // Mapping to keep track of price per energy for every round.
-    mapping(uint256 => uint256) public prices;
-
-    constructor(address _token0, address _token1,uint256 _members,uint256 _k_lower,uint256 _k_upper,uint256 _midpoint,uint256 _steepness) {
+    constructor(address _token0, address _token1,uint256 _k_lower,uint256 _k_upper,uint256 _midpoint,uint256 _steepness) {
         token0 = IERC20(_token0);
         token1 = IERC20(_token1);
-        total_member_count = _members;
         k_lower = sd(int256(_k_lower * 1e16));
         k_upper = sd(int256(_k_upper * 1e16));
         midpoint = sd(int256(_midpoint* 1e18));
@@ -84,29 +82,33 @@ contract AMMBA {
     }
     
     function clear() external {
-        SD59x18 price_per_energy = get_price(reserve0,reserve1);
+        SD59x18 price_per_energy = calculate_price(reserve0,reserve1);
         prices[current_mapping_count] = uint256(price_per_energy.intoInt256());
         for (uint256 i = 0; i < current_member_list.length; i++ ){
             address member = current_member_list[i];
             uint256 token0_balance = balanceOf[current_mapping_count][member].token0_balance;
             uint256 token1_balance = balanceOf[current_mapping_count][member].token1_balance;
-            int256 total_demand = sd(int256(reserve0)).div(price_per_energy).intoInt256(); 
+            uint256 total_energy_sold = min(uint256(sd(int256(reserve0)).div(price_per_energy).intoInt256()),reserve1); 
+            s_e[current_mapping_count] = total_energy_sold;
             // if member deposited energy
             if (token1_balance > 0){
-                uint256 amount_out = uint256(price_per_energy.mul(sd(int256(token1_balance))).intoInt256());
+                uint256 energy_sold= uint256(sd(int256(token1_balance)).div(sd(int256(reserve1))).mul(sd(int256(total_energy_sold))).intoInt256());
+                uint256 amount_out = uint256(sd(int256(energy_sold)).mul(price_per_energy).intoInt256());
                 balanceOf[current_mapping_count][member].token0_out = amount_out;
                 // if energy surpuls, transfer part of energy tokens back to sender
-                if (int256(reserve1) > total_demand){
-                    uint256 surplus = uint256(sd(int256(reserve1)).sub(sd(total_demand)).mul(sd(int256(token1_balance)).div(sd(int256(reserve1)))).intoInt256());
+                if (token1_balance > energy_sold){
+                    uint256 surplus = token1_balance-energy_sold;
                     balanceOf[current_mapping_count][member].token1_out = surplus;
                 }
             }
             // if memeber deposited money
             else {
-                uint256 amount_out = uint256(sd(int256(reserve1)).mul(sd(int256(token0_balance)).div(sd(int256(reserve0)))).intoInt256());
+                uint256 amount_out = min(uint256(sd(int256(token0_balance)).div(price_per_energy).intoInt256()),uint256(sd(int256(total_energy_sold)).mul(sd(int256(token0_balance)).div(sd(int256(reserve0)))).intoInt256()));
                 balanceOf[current_mapping_count][member].token1_out = amount_out;
                 uint256 price = uint256(sd(int256(amount_out)).mul(price_per_energy).intoInt256());
-                balanceOf[current_mapping_count][member].token0_out = token0_balance - price;
+                if(token0_balance>price){
+                    balanceOf[current_mapping_count][member].token0_out = token0_balance - price;
+                }
             }
 
 
@@ -116,19 +118,49 @@ contract AMMBA {
             address member = current_member_list[i];
             uint256 token0_out = balanceOf[current_mapping_count][member].token0_out;
             uint256 token1_out = balanceOf[current_mapping_count][member].token1_out;
-            if (token0_out > 100){
-                token0.transfer(member,token0_out-100);
+            if (token0_out > 1000){
+                token0.transfer(member,token0_out-1000);
             }
-            if (token1_out > 100){
-                token1.transfer(member,token1_out-100);
+            if (token1_out > 1000){
+                token1.transfer(member,token1_out-1000);
             }
         } 
         
         current_mapping_count= current_mapping_count+1;
         delete current_member_list;
     }
-
-    function get_price(uint256 _reserve0,uint256 _reserve1) public view returns (SD59x18){
+    function set_k_lower(uint256 _k_lower) public {
+        k_lower = sd(int256(_k_lower));
+    }
+    function get_se(uint256 round) public view returns (uint256){
+        return s_e[round];
+    }
+    function set_k_upper(uint256 _k_upper) public {
+        k_upper = sd(int256(_k_upper));
+    }
+    function set_steepness(uint256 _steepness) public {
+        steepness=sd(int256(_steepness));
+    }
+    function set_midpoint(uint256 _midpoint) public {
+        midpoint = sd(int256(_midpoint));
+    }
+    function get_member_info(uint256 round, address member) public view returns(uint256,uint256,bool,uint256,uint256){
+        return ( balanceOf[round][member].token0_balance,balanceOf[round][member].token1_balance,balanceOf[round][member].has_deposited,balanceOf[round][member].token0_out,balanceOf[round][member].token1_out);
+    }
+    function get_reserve0() public view returns (uint256){
+        return uint256(reserve0);
+    }
+    function get_reserve1() public view returns (uint256){
+        return uint256(reserve1);
+    }
+    function get_price(uint256 round) public view returns(uint256){
+        return prices[round];
+    }
+    function _update(uint256 _res0, uint256 _res1) private {
+        reserve0 = _res0;
+        reserve1 = _res1;
+     }
+    function calculate_price(uint256 _reserve0,uint256 _reserve1) public view returns (SD59x18){
         SD59x18 ratio = sd(int256(_reserve1)).div(sd(int256(_reserve0)));
         SD59x18 nominator = k_upper.sub(k_lower);
         if(ratio.sub(midpoint) <= EXP_MAX_INPUT){
@@ -144,37 +176,10 @@ contract AMMBA {
             return k_upper;
         }
     }
-
-    function _update(uint256 _res0, uint256 _res1) private {
-        reserve0 = _res0;
-        reserve1 = _res1;
-    }
     function _exists (address member) private view returns (bool){
         return balanceOf[current_mapping_count][member].has_deposited;
     }
-    function get_reserve0() public view returns (uint256){
-        return uint256(reserve0);
-    }
-    function get_reserve1() public view returns (uint256){
-        return uint256(reserve1);
-    }
-    function set_k_lower(uint256 _k_lower) public {
-        k_lower = sd(int256(_k_lower));
-    }
-    function set_k_upper(uint256 _k_upper) public {
-        k_upper = sd(int256(_k_upper));
-    }
-    function set_steepness(uint256 _steepness) public {
-        steepness=sd(int256(_steepness));
-    }
-    function set_midpoint(uint256 _midpoint) public {
-        midpoint = sd(int256(_midpoint));
-    }
-
-    function get_member_info(uint256 round, address member) public view returns(uint256,uint256,bool,uint256,uint256){
-        return ( balanceOf[round][member].token0_balance,balanceOf[round][member].token1_balance,balanceOf[round][member].has_deposited,balanceOf[round][member].token0_out,balanceOf[round][member].token1_out);
-    }
-    function get_price(uint256 round) public view returns(uint256){
-        return prices[round];
+    function min(uint256 a, uint256 b) private pure returns (uint256) {
+    return a <= b ? a : b;
     }
 }
