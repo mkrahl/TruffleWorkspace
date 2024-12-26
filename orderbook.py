@@ -48,7 +48,7 @@ class OrderBook(object):
         self.ask_min = max_price + 1
         self.orders = {} # orderid -> Order
         
-    def execute(self, trader_buy, trader_sell, price, size):
+    def execute(self, trader_buy, trader_sell, price, size,cycle):
         """
         Execution callback
         @param trader_buy: the trader on the buy side
@@ -58,7 +58,7 @@ class OrderBook(object):
         """
         print ("EXECUTE: %s BUY %s SELL %s %s @ %d" % (trader_buy, trader_sell, size, self.name, price))
         
-    def limit_order(self, side, size, price, trader,cycle):
+    def limit_order(self, side, size, price, trader,cycle,data):
         """
         Inserts a new limit order into the order book. If the order 
         can be matched, one or more calls to the execution callback will
@@ -84,11 +84,11 @@ class OrderBook(object):
                 while entries:
                     entry = entries[0]
                     if entry.size < size:
-                        self.cb(trader, entry.trader, price, entry.size,cycle)
+                        self.cb(trader, entry.trader, price, entry.size,cycle,data)
                         size -= entry.size
                         entries.popleft()
                     else:
-                        self.cb(trader, entry.trader, price, size,cycle)
+                        self.cb(trader, entry.trader, price, size,cycle,data)
                         if entry.size > size:
                             entry.size -= size
                         else:
@@ -115,11 +115,11 @@ class OrderBook(object):
                 while entries:
                     entry = entries[0]
                     if entry.size < size:
-                        self.cb(entry.trader, trader, price, entry.size,cycle)
+                        self.cb(entry.trader, trader, price, entry.size,cycle,data)
                         size -= entry.size
                         entries.popleft()
                     else:
-                        self.cb(entry.trader, trader, price, size,cycle)
+                        self.cb(entry.trader, trader, price, size,cycle,data)
                         if entry.size > size:
                             entry.size -= size
                         else:

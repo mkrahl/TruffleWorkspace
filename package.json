@@ -5,7 +5,7 @@
     "truffle": "^5.11.5"
   },
   "scripts": {
-    "ganache": "ganache --wallet.totalAccounts 251 --wallet.deterministic true -u --account_keys_path keys.json"
+    "ganache": "ganache --wallet.totalAccounts 251 --wallet.deterministic true -u --account_keys_path keys.json --chain.asyncRequestProcessing true --logging.quiet true"
   },
   "name": "truffleworkspace",
   "version": "1.0.0",
