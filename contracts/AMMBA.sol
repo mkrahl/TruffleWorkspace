@@ -110,8 +110,6 @@ contract AMMBA {
                     balanceOf[current_mapping_count][member].token0_out = token0_balance - price;
                 }
             }
-
-
         }
         
         for (uint256 i = 0; i < current_member_list.length; i++){
