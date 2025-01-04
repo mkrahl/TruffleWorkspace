@@ -16,11 +16,8 @@ This repository contains the code and resources for the Master Thesis titled "Ad
     ```bash
     git clone <repository-url>
     ```
-2. Navigate to the project directory:
-    ```bash
-    cd /c:/Users/hmart/Desktop/MasterWorkspace/Truffle_new
     ```
-3. Install the required packages:
+2. Install the required packages:
     ```bash
     npm install
     ```
